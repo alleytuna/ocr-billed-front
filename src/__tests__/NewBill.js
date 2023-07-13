@@ -2,11 +2,12 @@
  * @jest-environment jsdom
  */
 
-import { fireEvent, screen } from "@testing-library/dom";
+import { fireEvent, screen, waitFor } from "@testing-library/dom";
 import NewBillUI from "../views/NewBillUI.js";
 import NewBill from "../containers/NewBill.js";
 import mockStore from "../__mocks__/store";
-import { ROUTES } from "../constants/routes";
+import { ROUTES, ROUTES_PATH } from "../constants/routes";
+import router from "../app/Router.js";
 import { localStorageMock } from "../__mocks__/localStorage.js";
 
 jest.mock("../app/Store", () => mockStore);
@@ -57,6 +58,7 @@ describe("Given I am connected as an employee", () => {
       expect(handleSubmit).toHaveBeenCalled();
     });
 
+    // test d'intégration POST
     test("Then I can submit a new bill when inputs are properly filled", async () => {
       document.body.innerHTML = NewBillUI();
 
@@ -72,6 +74,57 @@ describe("Given I am connected as an employee", () => {
       formNewBill.addEventListener("submit", handleSubmit);
       fireEvent.submit(formNewBill);
       expect(handleSubmit).toHaveBeenCalled();
+      // vérifie que la redirection a été faite et donc que le POST a fonctionné
+      expect(screen.getByText("Mes notes de frais")).toBeTruthy();
+    });
+
+    // gestion d'erreur
+    describe("When an error occurs on API", () => {
+      beforeEach(() => {
+        jest.spyOn(mockStore, "bills");
+        Object.defineProperty(window, "localStorage", {
+          value: localStorageMock,
+        });
+        window.localStorage.setItem(
+          "user",
+          JSON.stringify({
+            type: "Employee",
+            email: "a@a",
+          })
+        );
+        const root = document.createElement("div");
+        root.setAttribute("id", "root");
+        document.body.appendChild(root);
+        router();
+      });
+  
+      test("Then it fetches bills from an API and fails with 404 message error", async () => {
+        mockStore.bills.mockImplementationOnce(() => {
+          return {
+            list: () => {
+              return Promise.reject(new Error("Erreur 404"));
+            },
+          };
+        });
+        window.onNavigate(ROUTES_PATH.Bills);
+        await new Promise(process.nextTick);
+        const message = await waitFor(() => screen.getByText(/Erreur 404/));
+        expect(message).toBeTruthy();
+      });
+  
+      test("Then it fetches messages from an API and fails with 500 message error", async () => {
+        mockStore.bills.mockImplementationOnce(() => {
+          return {
+            list: () => {
+              return Promise.reject(new Error("Erreur 500"));
+            },
+          };
+        });
+        window.onNavigate(ROUTES_PATH.Bills);
+        await new Promise(process.nextTick);
+        const message = await waitFor(() => screen.getByText(/Erreur 500/));
+        expect(message).toBeTruthy();
+      });
     });
   });
 });
